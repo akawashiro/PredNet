@@ -65,6 +65,7 @@ xp = cuda.cupy if args.gpu >= 0 else np
 # Create Model
 #(height of image, width of image, channels on each layer)
 prednet = net.PredNet(args.size[0], args.size[1], args.channels)
+
 model = L.Classifier(prednet, lossfun=mean_squared_error)
 model.compute_accuracy = False
 optimizer = optimizers.Adam()
@@ -122,7 +123,7 @@ if args.images:
 else:
     sequencelist = load_list(args.sequences, args.root)
 
-if args.test == True:
+if args.test is True:
     for seq in range(len(sequencelist)):
         imagelist = load_list(sequencelist[seq], args.root)
         prednet.reset_state()

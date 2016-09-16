@@ -7,6 +7,7 @@ import chainer.links as L
 from chainer import variable
 
 
+# このクラスは完全にConvLSTMからしか呼び出されない
 class EltFilter(chainer.Link):
 
     def __init__(self, width, height, channels, batchSize=1, wscale=1, bias=0, nobias=False,
@@ -28,6 +29,8 @@ class EltFilter(chainer.Link):
                 initial_bias = bias
             self.b.data[...] = initial_bias
 
+    # e = EltFilter(l)
+    # e(x)とした時に呼び出される
     def __call__(self, x):
         y = x * self.W
         if self.b is not None:
@@ -35,11 +38,15 @@ class EltFilter(chainer.Link):
         return y
 
 
+# このクラスはPredNetからしか呼び出されない
+# つまり参照透明的なクラス
+# 関数で良かった説
 class ConvLSTM(chainer.Chain):
 
     def __init__(self, width, height, in_channels, out_channels, batchSize=1):
         self.state_size = (batchSize, out_channels, height, width)
         self.in_channels = in_channels
+        # superクラスのインスタンスメソッドを呼び出すキーワード
         super(ConvLSTM, self).__init__(
             h_i=L.Convolution2D(out_channels, out_channels, 3, pad=1),
             c_i=EltFilter(width, height, out_channels, nobias=True),
