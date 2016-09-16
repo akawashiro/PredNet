@@ -196,11 +196,11 @@ class PredNet(chainer.Chain):
             else:
                 # nth == 0ならA=x(入力そのまま) nth !=
                 # 0ならA=MaxPool(ReLU(Con(E[nth-1])))
-                # A = F.max_pooling_2d(
-                    # F.relu(getattr(self, 'ConvA' + str(nth))(E[nth - 1])), 2, stride=2)
+                A = F.max_pooling_2d(
+                    F.relu(getattr(self, 'ConvA' + str(nth))(E[nth - 1])), 2, stride=2)
                 # ひとつ前のRをAに代入してみた。つまりシンプルなAnoter PredNet 案1
-                R_nth_1 = getattr(self, 'ConvLSTM' + str(nth))((E[nth - 1],))
-                A = R_nth_1
+                # R_nth_1 = getattr(self, 'ConvLSTM' + str(nth))((E[nth - 1],))
+                # A = R_nth_1
                 E[nth] = F.concat((F.relu(A - getattr(self, 'P' + str(nth))),
                                    F.relu(getattr(self, 'P' + str(nth)) - A)))
 

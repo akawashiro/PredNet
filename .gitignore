@@ -1,4 +1,5 @@
 dataset/*
 images/*
+images-master-output/*
 models/*
 *.pyc
