@@ -153,19 +153,26 @@ class PredNet(chainer.Chain):
         # n th layer
         for nth in range(self.layers):
             if nth != 0:
+                # L.Convolution2D(inputPtn, convOutPtn, filtersize)
                 self.add_link(
-                    'ConvA' + str(nth), L.Convolution2D(channels[nth - 1] * 2, channels[nth], 3, pad=1))
+                    'ConvA' + str(nth), L.Convolution2D(channels[nth - 1] * 2,
+                                                        channels[nth], 3, pad=1))
 
             # r_channels are not used 2016/09/13
             self.add_link(
-                'ConvP' + str(nth), L.Convolution2D(r_channels[nth], channels[nth], 3, pad=1))
+                'ConvP' + str(nth), L.Convolution2D(r_channels[nth],
+                                                    channels[nth], 3, pad=1))
 
             if nth == self.layers - 1:
-                self.add_link('ConvLSTM' + str(nth), ConvLSTM(self.sizes[nth][3], self.sizes[nth][2],
-                                                              (self.sizes[nth][1] * 2, ), r_channels[nth]))
+                self.add_link('ConvLSTM' + str(nth),
+                              ConvLSTM(self.sizes[nth][3], self.sizes[nth][2],
+                                       (self.sizes[nth][1] * 2, ), r_channels[nth]))
             else:
-                self.add_link('ConvLSTM' + str(nth), ConvLSTM(self.sizes[nth][3], self.sizes[nth][2],
-                                                              (self.sizes[nth][1] * 2, r_channels[nth + 1]), r_channels[nth]))
+                self.add_link('ConvLSTM' + str(nth),
+                              ConvLSTM(self.sizes[nth][3], self.sizes[nth][2],
+                                       (self.sizes[nth][1] * 2,
+                                        r_channels[nth + 1]),
+                                       r_channels[nth]))
 
         self.reset_state()
 
@@ -186,12 +193,17 @@ class PredNet(chainer.Chain):
             setattr(self, 'P' + str(nth), None)
             getattr(self, 'ConvLSTM' + str(nth)).reset_state()
 
+    # xは入力
     def __call__(self, x):
         for nth in range(self.layers):
             if getattr(self, 'P' + str(nth)) is None:
                 setattr(self, 'P' + str(nth), variable.Variable(
                     self.xp.zeros(self.sizes[nth], dtype=x.data.dtype),
                     volatile='auto'))
+
+        print("x", type(x), type(x.data), len(x.data[0]))
+        print(x.data[0][0])
+        print(x.data)
 
         # Error
         E = [None] * self.layers
@@ -201,15 +213,28 @@ class PredNet(chainer.Chain):
                 E[nth] = F.concat((F.relu(x - getattr(self, 'P' + str(nth))),
                                    F.relu(getattr(self, 'P' + str(nth)) - x)))
             else:
+                # ここがオリジナル
                 # nth == 0ならA=x(入力そのまま) nth !=
                 # 0ならA=MaxPool(ReLU(Con(E[nth-1])))
-                A = F.max_pooling_2d(
-                    F.relu(getattr(self, 'ConvA' + str(nth))(E[nth - 1])), 2, stride=2)
+                # print(type(getattr(self, 'ConvA' + str(nth))))
+                # A = F.max_pooling_2d(
+                    # F.relu(getattr(self, 'ConvA' + str(nth))(E[nth - 1])), 2, stride=2)
+                # E[nth] = F.concat((F.relu(A - getattr(self, 'P' + str(nth))),
+                                   # F.relu(getattr(self, 'P' + str(nth)) -
+                                   # A)))
+
+                # print("nth=", nth, type(A.data), len(A.data), len(A.data[0]))
+
                 # ひとつ前のRをAに代入してみた。つまりシンプルなAnoter PredNet 案1
                 # R_nth_1 = getattr(self, 'ConvLSTM' + str(nth))((E[nth - 1],))
                 # A = R_nth_1
-                E[nth] = F.concat((F.relu(A - getattr(self, 'P' + str(nth))),
-                                   F.relu(getattr(self, 'P' + str(nth)) - A)))
+
+                # 一つ前のA^をAに代入してみた
+                A = getattr(self, 'P' + str(nth - 1))
+                I = F.max_pooling_2d(getattr(self, 'ConvA' + str(nth))(F.concat((A, A))), 
+                                     2, stride=2)
+                E[nth] = F.concat((F.relu(I - getattr(self, 'P' + str(nth))),
+                                   F.relu(getattr(self, 'P' + str(nth)) - I)))
 
         R = [None] * self.layers
         for nth in reversed(range(self.layers)):
@@ -220,8 +245,8 @@ class PredNet(chainer.Chain):
                 R[nth] = getattr(self, 'ConvLSTM' + str(nth))((E[nth], upR))
 
             if nth == 0:
-                setattr(self, 'P' + str(nth), F.clipped_relu(getattr(self,
-                                                                     'ConvP' + str(nth))(R[nth]), 1.0))
+                setattr(self, 'P' + str(nth),
+                        F.clipped_relu(getattr(self, 'ConvP' + str(nth))(R[nth]), 1.0))
             else:
                 setattr(self, 'P' + str(nth),
                         F.relu(getattr(self, 'ConvP' + str(nth))(R[nth])))
