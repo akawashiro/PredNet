@@ -1,3 +1,6 @@
+# ver3
+This version is same with ver2 but this one is made for maui and knv and kng.
+
 # PredNet
 This is a implimentation of [PredNet][] on chainer.
 
