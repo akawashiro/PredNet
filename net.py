@@ -201,9 +201,9 @@ class PredNet(chainer.Chain):
                     self.xp.zeros(self.sizes[nth], dtype=x.data.dtype),
                     volatile='auto'))
 
-        print("x", type(x), type(x.data), len(x.data[0]))
-        print(x.data[0][0])
-        print(x.data)
+        # print("x", type(x), type(x.data), len(x.data[0]))
+        # print(x.data[0][0])
+        # print(x.data)
 
         # Error
         E = [None] * self.layers
