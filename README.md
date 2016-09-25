@@ -1,5 +1,5 @@
-# ver3
-This version is same with ver2 but this one is made for maui and knv and kng.
+# ver5
+This version is same with ver2 but this one is made for kng06 with GPU.
 
 # PredNet
 This is a implimentation of [PredNet][] on chainer.
