@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import argparse
 import os
 import numpy as np
@@ -10,6 +12,18 @@ from chainer import optimizers
 from chainer import serializers
 from chainer.functions.loss.mean_squared_error import mean_squared_error
 import net
+import logging
+from datetime import datetime
+
+start_time = str(datetime.now()).replace(" ","")
+logging.basicConfig(filename='main' + start_time + '.log',
+                    format='%(asctime)s %(message)s', level=logging.DEBUG)
+
+
+def print_and_log(s):
+    print s
+    logging.info(s)
+
 
 parser = argparse.ArgumentParser(
     description='PredNet')
@@ -41,11 +55,14 @@ parser.add_argument('--period', default=1000000, type=int,
                     help='Period of training (frames)')
 parser.add_argument('--test', dest='test', action='store_true')
 parser.set_defaults(test=False)
+parser.add_argument('--improve', default=0, type=int,
+                    help='Use the PredNet of improved version')
+
 args = parser.parse_args()
 
 
 if (not args.images) and (not args.sequences):
-    print('Please specify images or sequences')
+    print_and_log('Please specify images or sequences')
     exit()
 
 args.size = args.size.split(',')
@@ -64,7 +81,11 @@ xp = cuda.cupy if args.gpu >= 0 else np
 
 # Create Model
 #(height of image, width of image, channels on each layer)
-prednet = net.PredNet(args.size[0], args.size[1], args.channels)
+if args.improve == 0:
+    prednet = net.PredNet(args.size[0], args.size[1], args.channels)
+if args.improve == 1:
+    prednet = net.PredNet_simple_improve(
+        args.size[0], args.size[1], args.channels)
 
 model = L.Classifier(prednet, lossfun=mean_squared_error)
 model.compute_accuracy = False
@@ -74,16 +95,16 @@ optimizer.setup(model)
 if args.gpu >= 0:
     cuda.get_device(args.gpu).use()
     model.to_gpu()
-    print('Running on a GPU')
+    print_and_log('Running on a GPU')
 else:
-    print('Running on a CPU')
+    print_and_log('Running on a CPU')
 
 # Init/Resume
 if args.initmodel:
-    print('Load model from', args.initmodel)
+    print_and_log('Load model from' + str(args.initmodel))
     serializers.load_npz(args.initmodel, model)
 if args.resume:
-    print('Load optimizer state from', args.resume)
+    print_and_log('Load optimizer state from' + str(args.resume))
     serializers.load_npz(args.resume, optimizer)
 
 if not os.path.exists('models'):
@@ -134,7 +155,7 @@ if args.test is True:
         y_batch = np.ndarray((batchSize, args.channels[0], args.size[
                              1], args.size[0]), dtype=np.float32)
         for i in range(0, len(imagelist)):
-            print('frameNo:' + str(i))
+            print_and_log('frameNo:' + str(i))
             x_batch[0] = read_image(imagelist[i])
             loss += model(chainer.Variable(xp.asarray(x_batch)),
                           chainer.Variable(xp.asarray(y_batch)))
@@ -154,7 +175,7 @@ if args.test is True:
         if args.gpu >= 0:
             model.to_gpu()
         for i in range(len(imagelist), len(imagelist) + args.ext):
-            print('extended frameNo:' + str(i))
+            print_and_log('extended frameNo:' + str(i))
             loss += model(chainer.Variable(xp.asarray(x_batch)),
                           chainer.Variable(xp.asarray(y_batch)))
             loss.unchain_backward()
@@ -167,13 +188,17 @@ if args.test is True:
             if args.gpu >= 0:
                 model.to_gpu()
 
+
+# 訓練のとき
 else:
     count = 0
     seq = 0
+    loss_sequencelist = 0
     while count < args.period:
         imagelist = load_list(sequencelist[seq], args.root)
         prednet.reset_state()
         loss = 0
+        loss_imagelist = 0
 
         batchSize = 1
         x_batch = np.ndarray((batchSize, args.channels[0], args.size[
@@ -185,8 +210,9 @@ else:
             y_batch[0] = read_image(imagelist[i])
             loss += model(chainer.Variable(xp.asarray(x_batch)),
                           chainer.Variable(xp.asarray(y_batch)))
+            loss_imagelist += loss.data
 
-            print('frameNo:' + str(i))
+            print_and_log('frameNo:' + str(i))
             if (i + 1) % args.bprop == 0:
                 model.zerograds()
                 loss.backward()
@@ -203,16 +229,22 @@ else:
                             str(count) + '_' + str(seq) + '_' + str(i) + 'z.jpg')
                 if args.gpu >= 0:
                     model.to_gpu()
-                print('loss:' + str(float(model.loss.data)))
+                print_and_log('loss:' + str(float(model.loss.data)))
 
             if (count % args.save) == 0:
-                print('save the model')
+                print_and_log('save the model')
                 serializers.save_npz('models/' + str(count) + '.model', model)
-                print('save the optimizer')
+                print_and_log('save the optimizer')
                 serializers.save_npz(
                     'models/' + str(count) + '.state', optimizer)
 
             x_batch[0] = y_batch[0]
             count += 1
 
+        print_and_log('loss-imagelist' + str(seq) + ' : ' + str(loss_imagelist) +
+                      ' , lenghth : ' + str(len(imagelist)))
         seq = (seq + 1) % len(sequencelist)
+        loss_sequencelist += loss_imagelist
+        if seq == len(sequencelist) - 1:
+            print_and_log('loss-sequencelist : ' + str(loss_sequencelist))
+            loss_sequencelist = 0

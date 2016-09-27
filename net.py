@@ -135,10 +135,89 @@ class ConvLSTM(chainer.Chain):
 
 
 class PredNet(chainer.Chain):
+    def __init__(self, width, height, channels, r_channels = None, batchSize = 1):
+        super(PredNet, self).__init__()
+        if r_channels is None:
+            r_channels = channels
+        
+        self.layers = len(channels)
+        self.sizes = [None]*self.layers
+        w,h = width, height
+        for nth in range(self.layers):
+            self.sizes[nth] = (batchSize, channels[nth], h, w)
+            w = w / 2
+            h = h / 2
+        
+        for nth in range(self.layers):
+            if nth != 0:
+                self.add_link('ConvA' + str(nth), L.Convolution2D(channels[nth - 1] *2, channels[nth], 3, pad=1))
+            
+            self.add_link('ConvP' + str(nth), L.Convolution2D(r_channels[nth], channels[nth], 3, pad=1))
+            
+            if nth == self.layers - 1:
+                self.add_link('ConvLSTM' + str(nth), ConvLSTM(self.sizes[nth][3], self.sizes[nth][2],
+                               (self.sizes[nth][1] * 2, ), r_channels[nth]))
+            else:
+                self.add_link('ConvLSTM' + str(nth), ConvLSTM(self.sizes[nth][3], self.sizes[nth][2],
+                               (self.sizes[nth][1] * 2, r_channels[nth + 1]), r_channels[nth]))
+                
+        self.reset_state()
+
+    def to_cpu(self):
+        super(PredNet, self).to_cpu()
+        for nth in range(self.layers):
+            if getattr(self, 'P' + str(nth)) is not None:
+                getattr(self, 'P' + str(nth)).to_cpu()
+
+    def to_gpu(self, device=None):
+        super(PredNet, self).to_gpu(device)
+        for nth in range(self.layers):
+            if getattr(self, 'P' + str(nth)) is not None:
+                getattr(self, 'P' + str(nth)).to_gpu(device)
+
+    def reset_state(self):
+        for nth in range(self.layers):
+            setattr(self, 'P' + str(nth), None)
+            getattr(self, 'ConvLSTM' + str(nth)).reset_state()
+
+    def __call__(self, x):
+        for nth in range(self.layers):
+            if getattr(self, 'P' + str(nth)) is None:
+                setattr(self, 'P' + str(nth), variable.Variable(
+                    self.xp.zeros(self.sizes[nth], dtype=x.data.dtype),
+                    volatile='auto'))
+
+        E = [None] * self.layers
+        for nth in range(self.layers):
+            if nth == 0:
+                E[nth] = F.concat((F.relu(x - getattr(self, 'P' + str(nth))),
+                                  F.relu(getattr(self, 'P' + str(nth)) - x)))
+            else:
+                A = F.max_pooling_2d(F.relu(getattr(self, 'ConvA' + str(nth))(E[nth - 1])), 2, stride = 2)
+                E[nth] = F.concat((F.relu(A - getattr(self, 'P' + str(nth))),
+                                  F.relu(getattr(self, 'P' + str(nth)) - A)))
+
+        R = [None] * self.layers
+        for nth in reversed(range(self.layers)):
+            if nth == self.layers - 1:
+                R[nth] = getattr(self, 'ConvLSTM' + str(nth))((E[nth],))
+            else:
+                upR = F.unpooling_2d(R[nth + 1], 2, stride = 2, cover_all=False)
+                R[nth] = getattr(self, 'ConvLSTM' + str(nth))((E[nth], upR))
+
+            if nth == 0:
+                setattr(self, 'P' + str(nth), F.clipped_relu(getattr(self, 'ConvP' + str(nth))(R[nth]), 1.0))
+            else:
+                setattr(self, 'P' + str(nth), F.relu(getattr(self, 'ConvP' + str(nth))(R[nth])))
+        
+        return self.P0
+
+
+class PredNet_simple_improve(chainer.Chain):
 
     # channels are list of number of channels on each layer
     def __init__(self, width, height, channels, r_channels=None, batchSize=1):
-        super(PredNet, self).__init__()
+        super(PredNet_simple_improve, self).__init__()
         if r_channels is None:
             r_channels = channels
 
@@ -177,13 +256,13 @@ class PredNet(chainer.Chain):
         self.reset_state()
 
     def to_cpu(self):
-        super(PredNet, self).to_cpu()
+        super(PredNet_simple_improve, self).to_cpu()
         for nth in range(self.layers):
             if getattr(self, 'P' + str(nth)) is not None:
                 getattr(self, 'P' + str(nth)).to_cpu()
 
     def to_gpu(self, device=None):
-        super(PredNet, self).to_gpu(device)
+        super(PredNet_simple_improve, self).to_gpu(device)
         for nth in range(self.layers):
             if getattr(self, 'P' + str(nth)) is not None:
                 getattr(self, 'P' + str(nth)).to_gpu(device)
