@@ -59,6 +59,7 @@ parser.add_argument('--improve', default=0, type=int,
                     help='Use the PredNet of improved version')
 
 args = parser.parse_args()
+print_and_log(args)
 
 
 if (not args.images) and (not args.sequences):
@@ -242,7 +243,8 @@ else:
             count += 1
 
         print_and_log('loss-imagelist' + str(seq) + ' : ' + str(loss_imagelist) +
-                      ' , lenghth : ' + str(len(imagelist)))
+                      ' , lenghth : ' + str(len(imagelist))
+                      + ' , count : ' + str(count))
         seq = (seq + 1) % len(sequencelist)
         loss_sequencelist += loss_imagelist
         if seq == len(sequencelist) - 1:
