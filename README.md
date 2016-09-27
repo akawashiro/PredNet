@@ -1,5 +1,5 @@
-# ver5
-This version is same with ver2 but this one is made for kng06 with GPU.
+# ver7
+This version is same with ver6 but this one is used for improved PredNet.
 
 # PredNet
 This is a implimentation of [PredNet][] on chainer.
